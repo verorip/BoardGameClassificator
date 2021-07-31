@@ -3,7 +3,7 @@ class Game(object):
         self.name = name
         self.max_players = max_players
         # dizionario con chiave = a nome e valore = a lista con le posizioni
-        # e.g. 'rick': [0,0,2,1,0]: significa che non è mai arrivaot primo o secondo, due volte 3 e una volta 4
+        # e.g. 'rick': [0,0,2,1,0]: significa che non è mai arrivaot primo o secondo o quinto, due volte 3 e una volta 4
         self.users = dict()
 
     def add_user(self, name):
@@ -15,6 +15,8 @@ class Game(object):
         else:
             return None
 
+    def get_users_stats(self):
+        return
     def update_user(self, name, position):
         if name not in self.users.keys():
             self.add_user(name)

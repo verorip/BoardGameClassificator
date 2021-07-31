@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 games_list = list()
 
 FIRST, SECOND = range(2)
-ONE, TWO, THREE = range(3)
+ONE, TWO, THREE, FOURTH = range(4)
 
 tmp_game = [' ', ' ']
 
@@ -37,39 +37,12 @@ def start(update: Update, context: CallbackContext) -> None:
     update.message.reply_photo(open('logo/logo.jpg', 'rb'), caption='Board Game Geek Bot è in funzione! #BossCulo')
 
 
-def add_game(update: Update, context: CallbackContext) -> None:
-    if len(update.message.text.split()) < 3:
-        update.message.reply_text('You need to insert game name')
-    games_list.append(Game(update.message.text.split()[1]))
-
-
-def get_game_stats(update: Update, context: CallbackContext) -> None:
-    pass
-
-
-def commands(update: Update, context: CallbackContext) -> None:
-    keyboard = [
-        [InlineKeyboardButton("Add Game", callback_data=str(FIRST))],
-        [InlineKeyboardButton("Get Stats", callback_data=str(SECOND))]
-
-    ]
-
-    reply_markup = InlineKeyboardMarkup(keyboard, one_time_keyboard=True)
-    update.message.reply_photo(open('logo/logo.jpg', 'rb'), caption='Commands (buttons not working for now):',
-                               reply_markup=reply_markup)
-    return ONE
-
-
-def update_game(update: Update, context: CallbackContext) -> None:
-    pass
-
-
 def check_game(update: Update, context: CallbackContext):
     query = update.callback_query
     query.answer()
     query.message.reply_text('Inserire Nome Del Gioco')
     return TWO
-    #update.message.reply_text('Inserire Nome del gioco')
+    # update.message.reply_text('Inserire Nome del gioco')
 
 
 def check_size(update: Update, context: CallbackContext):
@@ -88,7 +61,54 @@ def insert_game(update: Update, context: CallbackContext):
     return ConversationHandler.END
 
 
-def quit(update: Update, context: CallbackContext):
+def commands(update: Update, context: CallbackContext):
+    keyboard = [
+        [InlineKeyboardButton("Add Game", callback_data=str(FIRST))],
+        [InlineKeyboardButton("Get Stats", callback_data=str(SECOND))]
+
+    ]
+
+    reply_markup = InlineKeyboardMarkup(keyboard, one_time_keyboard=True)
+    update.message.reply_photo(open('logo/logo.jpg', 'rb'), caption='Commands (buttons not working for now):',
+                               reply_markup=reply_markup)
+
+
+def check_stats(update: Update, context: CallbackContext):
+    query = update.callback_query
+    query.answer()
+    keyboard = [
+        [InlineKeyboardButton("By Game", callback_data=str(FIRST))],
+        [InlineKeyboardButton("By Player", callback_data=str(SECOND))]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    query.edit_message_reply_markup(reply_markup)
+
+    return ONE
+
+
+def get_game_stats(update: Update, context: CallbackContext):
+    pass
+
+
+def get_player_stats(update: Update, context: CallbackContext):
+    pass
+
+
+def select_game(update: Update, context: CallbackContext):
+    query = update.callback_query
+    query.answer()
+    query.message.reply_text('Inserire Nome Del Gioco')
+    return TWO
+
+
+def select_player(update: Update, context: CallbackContext):
+    query = update.callback_query
+    query.answer()
+    query.message.reply_text('Inserire Nome Del Giocatore')
+    return THREE
+
+
+def quit_conversation(update: Update, context: CallbackContext):
     return ConversationHandler.END
 
 
@@ -102,21 +122,29 @@ def main() -> None:
         return
     dispatcher = bot_updater.dispatcher
     dispatcher.add_handler(CommandHandler("stats", get_game_stats))
-    dispatcher.add_handler(CommandHandler("upd", update_game))
+    # dispatcher.add_handler(CommandHandler("upd", update_game))
 
-    #dispatcher.add_handler(CallbackQueryHandler(button))
     dispatcher.add_handler(ConversationHandler(
-        entry_points=[MessageHandler(Filters.text, commands)],
+        entry_points=[CallbackQueryHandler(check_game, pattern='^' + str(FIRST) + '$')],
         states={
-            ONE: [
-                CallbackQueryHandler(check_game, pattern='^' + str(FIRST) + '$'),
-                CallbackQueryHandler(get_game_stats, pattern='^' + str(SECOND) + '$'),
-            ],
-            TWO: [MessageHandler(Filters.text, callback=check_size)],
-            THREE: [MessageHandler(Filters.text, callback=insert_game)]
+            ONE: [MessageHandler(Filters.text, callback=check_size)],
+            TWO: [MessageHandler(Filters.text, callback=insert_game)]
 
         },
-        fallbacks=[CommandHandler('quit', quit)]
+        fallbacks=[CommandHandler('quit', quit_conversation)]
+    ))
+    dispatcher.add_handler(ConversationHandler(
+        entry_points=[CallbackQueryHandler(check_stats, pattern='^' + str(SECOND) + '$')],
+        states={
+            ONE: [
+                CallbackQueryHandler(select_game, pattern='^' + str(FIRST) + '$'),
+                CallbackQueryHandler(select_player, pattern='^' + str(SECOND) + '$'),
+            ],
+            TWO: [MessageHandler(Filters.text, callback=get_game_stats)],
+            THREE: [MessageHandler(Filters.text, callback=get_player_stats)]
+
+        },
+        fallbacks=[CommandHandler('quit', quit_conversation)]
     ))
     dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, commands))
     global games_list
