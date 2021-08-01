@@ -3,6 +3,7 @@ import os
 import io
 import pickle
 from Game import *
+from emoji import emojize
 
 from telegram import Update, Chat, ChatMember, ParseMode, ChatMemberUpdated, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -22,7 +23,8 @@ bot_updater = None
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
-
+emoji_medals = [emojize(":1st_place_medal:", use_aliases=True), emojize(":2nd_place_medal:", use_aliases=True),
+                emojize(":3rd_place_medal:", use_aliases=True)]
 logger = logging.getLogger(__name__)
 
 games_list = list()
@@ -35,7 +37,9 @@ tmp_game = [' ', ' ']
 
 def dyn_string(index, val, max):
     if index > max: return ''
-    return '{} volte {}°, '.format(val[index - 1], index) + dyn_string(index + 1, val, max)
+    return '{} volte {}, '.format(val[index - 1],
+                                  emoji_medals[index - 1] if index <= 3 else (str(index) + '°')) + dyn_string(index + 1,
+                                                                                                              val, max)
 
 
 def start(update: Update, context: CallbackContext) -> None:
@@ -99,7 +103,7 @@ def get_game_stats(update: Update, context: CallbackContext):
         for i in games_list:
             if update.message.text.lower().__eq__(i.get_Name()):
                 for key, val in i.get_users_stats().items():
-                    msg += '{} è arrivato '.format(key) + dyn_string(1, val, i.get_max_players()) + '\n'
+                    msg += '{} è arrivato '.format(key) + dyn_string(1, val, i.get_max_players())[:-2] + '\n'
         if len(msg) >= 1:
             update.message.reply_text(msg)
         else:
