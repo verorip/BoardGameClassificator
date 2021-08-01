@@ -46,6 +46,10 @@ def start(update: Update, context: CallbackContext) -> None:
     update.message.reply_photo(open('logo/logo.jpg', 'rb'), caption='Board Game Geek Bot è in funzione! #BossCulo')
 
 
+def save():
+    pickle.dump(games_list, open('data.pickle', 'wb'))
+
+
 def check_game(update: Update, context: CallbackContext):
     query = update.callback_query
     query.answer()
@@ -65,6 +69,7 @@ def insert_game(update: Update, context: CallbackContext):
     if tmp_game[0] not in [i.get_Name() for i in games_list]:
         games_list.append(Game(tmp_game[0], tmp_game[1]))
         update.message.reply_text('Gioco Aggiunto!')
+        save()
     else:
         update.message.reply_text('Gioco Già presente!')
 
@@ -153,7 +158,7 @@ def select_update_game(update: Update, context: CallbackContext):
 def upd_name(update: Update, context: CallbackContext):
     query = update.callback_query
     query.answer()
-    query.message.reply_text('Inserire Nome Del Gioco')
+    query.message.reply_text('Inserire Nome Del Gioco', timeout=20000)
     query.message.delete()
     return SIX
 
@@ -171,7 +176,8 @@ def update_game(update: Update, context: CallbackContext):
     else:
         tmp_game[0].update_user(msg[0], int(msg[1]))
         update.message.reply_text('inserire il successivo nome giocatore e posizione separati da spazio (e.g. Mario 1)')
-        update.message.delete()
+        update.message.delete(timeout=2000)
+        save()
         return SEVEN
 
 
@@ -220,10 +226,12 @@ def main() -> None:
     try:
         if os.stat("data.pickle").st_size > 0:
             games_list = pickle.load(open('data.pickle', 'rb'))
+            for i in games_list:
+                print(i.get_Name(), type(i))
     except Exception as e:
         print(e)
         return
-    games_list.append(Game('test', 4))
+    '''games_list.append(Game('test', 4))
     games_list[0].update_user('capuz', 1)
     games_list[0].update_user('rick', 2)
     games_list[0].update_user('boss', 3)
@@ -238,7 +246,7 @@ def main() -> None:
     games_list[0].update_user('boss', 3)
     games_list.append(Game('azz', 5))
     games_list.append(Game('the mind', 4))
-    games_list.append(Game('surviving mars', 9))
+    games_list.append(Game('surviving mars', 9))'''
     bot_updater.start_polling()
 
     # Run the bot until you press Ctrl-C or the process receives SIGINT,
