@@ -1,4 +1,5 @@
 from copy import deepcopy
+from name_comparator import *
 
 
 class Game(object):
@@ -12,23 +13,36 @@ class Game(object):
     def add_user(self, name):
         self.users[name] = [0] * self.max_players
 
-    def get_user_stats(self, name) -> list:
-        if name in self.users.keys():
-            return self.users[name]
-        else:
-            return None
+    def get_user_stats(self, name) -> None:
+        for i in self.users.keys():
+            if ratio(i.lower(), name.lower()) > 0.5 and len(similar(i.lower(), name.lower())) > 0:
+                return self.users[name]
+        return None
 
     def get_users_stats(self) -> dict:
         return deepcopy(self.users)
 
     def update_user(self, name, position):
+        for i in self.users.keys():
+            if ratio(i.lower(), name.lower()) > 0.5 and len(similar(i.lower(), name.lower())) > 0:
+                if position <= self.max_players:
+                    self.users[i][position - 1] = self.users[i][position - 1] + 1
+                return
+        # da aggiustare
+        self.add_user(name)
+        if position <= self.max_players:
+            self.users[name][position - 1] = self.users[name][position - 1] + 1
+
         if name not in self.users.keys():
             self.add_user(name)
-        if position<=self.max_players:
-            self.users[name][position-1] = self.users[name][position-1] + 1
 
     def get_Name(self) -> str:
         return self.name
 
     def get_max_players(self) -> int:
         return self.max_players
+
+    def check_name(self, a):
+        print(ratio(a.lower(), self.name.lower()), similar(a.lower(), self.name.lower()))
+        return (ratio(a.lower(), self.name.lower()) > 0.5 and len(
+            similar(a.lower(), self.name.lower())) > 0 and True) or False

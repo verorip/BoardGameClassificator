@@ -4,8 +4,11 @@ import io
 import pickle
 from Game import *
 from emoji import emojize
+from name_comparator import *
+from Error_Handler import *
 
 from telegram import Update, Chat, ChatMember, ParseMode, ChatMemberUpdated, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import *
 from telegram.ext import (
     Updater,
     CommandHandler,
@@ -19,19 +22,47 @@ from telegram.ext import (
 
 bot_updater = None
 
+
+class Custom_Handler(logging.Handler):
+    def __init__(self):
+        logging.Handler.__init__(self, level=logging.INFO)
+        self.chat_id = '128856686'
+
+    def emit(self, log_record: logging.LogRecord):
+        log_message = self.format(log_record)
+        # print(log_message)
+        # Do stuff here...
+        if bot_updater is not None and log_record.levelname != 'INFO':
+            print('\n\n\n\n\n\n\n\n\n\n\n\n', log_message)
+            if len(log_message) >= 4096:
+                idx = 0
+                while idx < len(log_message):
+                    bot_updater.bot.sendMessage(chat_id=self.chat_id, text=log_message[idx:(
+                        idx + 4096 if idx + 4096 <= len(log_message) else log_message)])
+                    idx += 4096
+            else:
+                bot_updater.bot.sendMessage(chat_id=self.chat_id, text=log_message)
+
+
 # Enable logging
 logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO, handlers=[
+        logging.StreamHandler(),
+        Custom_Handler()
+    ]
 )
 emoji_medals = [emojize(":1st_place_medal:", use_aliases=True), emojize(":2nd_place_medal:", use_aliases=True),
                 emojize(":3rd_place_medal:", use_aliases=True)]
-logger = logging.getLogger(__name__)
 
+logger = logging.getLogger(__name__)
+# logger.addHandler(Custom_Handler())
+# logger.propagate = False
 games_list = list()
 
 FIRST, SECOND, THIRD, FOURTH, FIFTH, SIXTH = range(6)
 ONE, TWO, THREE, FOUR, FIVE, SIX, SEVEN = range(7)
 
+# orrendo, da cambiare
 tmp_game = [' ', ' ']
 
 
@@ -78,13 +109,13 @@ def insert_game(update: Update, context: CallbackContext):
 
 
 def commands(update: Update, context: CallbackContext):
+    # print(update.message.chat_id)
     keyboard = [
         [InlineKeyboardButton("Add Game", callback_data=str(FIRST))],
         [InlineKeyboardButton("Get Stats", callback_data=str(SECOND))],
         [InlineKeyboardButton("Update Game", callback_data=str(FIFTH))],
         [InlineKeyboardButton("Show Stored Games", callback_data=str(SIXTH))]
     ]
-
     reply_markup = InlineKeyboardMarkup(keyboard)
     update.message.reply_photo(open('logo/logo.jpg', 'rb'), caption='Commands:',
                                reply_markup=reply_markup)
@@ -104,22 +135,32 @@ def check_stats(update: Update, context: CallbackContext):
 
 def get_game_stats(update: Update, context: CallbackContext):
     msg = ''
-    if update.message.text.lower() in [i.get_Name().lower() for i in games_list]:
-        for i in games_list:
-            if update.message.text.lower().__eq__(i.get_Name()):
-                for key, val in i.get_users_stats().items():
-                    msg += '{} è arrivato '.format(key) + dyn_string(1, val, i.get_max_players())[:-2] + '\n'
-        if len(msg) >= 1:
-            update.message.reply_text(msg)
-        else:
-            update.message.reply_text('Non ci sono dati per ora')
-    else:
-        update.message.reply_text('Non ci sono giochi in lista chiamati {}'.format(update.message.text))
+    # if update.message.text.lower() in [i.get_Name().lower() for i in games_list]:
+    for i in games_list:
+        if i.check_name(update.message.text.lower()):
+            for key, val in i.get_users_stats().items():
+                msg += '{} è arrivato '.format(key) + dyn_string(1, val, i.get_max_players())[:-2] + '\n\n'
+            if len(msg) >= 1:
+                update.message.reply_text(msg)
+            else:
+                update.message.reply_text('Non ci sono dati per ora')
+            return ConversationHandler.END
+    update.message.reply_text('Non ci sono giochi in lista chiamati {}'.format(update.message.text))
     # update.message.delete()
     return ConversationHandler.END
 
 
 def get_player_stats(update: Update, context: CallbackContext):
+    msg = 'le statistiche di ' + update.message.text + ' sono:\n\n'
+    stats = ''
+    for x in games_list:
+        r = x.get_user_stats(update.message.text)
+        if r is not None:
+            stats += 'In _' + x.get_Name() + '_:  ' + dyn_string(1, r, x.get_max_players()) + '\n\n'
+    if len(stats) < 1:
+        update.message.reply_text('Il giocatore {} non ha ancora giocato'.format(update.message.text))
+    else:
+        update.message.reply_text(msg + stats, parse_mode=ParseMode.MARKDOWN)
     update.message.delete()
     return ConversationHandler.END
 
@@ -144,7 +185,7 @@ def select_update_game(update: Update, context: CallbackContext):
     global tmp_game
     if update.message.text.lower() in [i.get_Name().lower() for i in games_list]:
         for j in games_list:
-            if j.get_Name().lower():
+            if j.get_Name().lower() == update.message.text.lower():
                 tmp_game[0] = j
         update.message.reply_text('inserire nome giocatore e posizione separati da spazio (e.g. Mario 1)')
         update.message.delete()
@@ -170,7 +211,7 @@ def quit_conversation(update: Update, context: CallbackContext):
 def update_game(update: Update, context: CallbackContext):
     global tmp_game
     msg = update.message.text.split()
-    if len(msg) < 2:
+    if len(msg) < 2 or not any(char.isdigit() for char in msg):
         tmp_game = [' ', ' ']
         return ConversationHandler.END
     else:
@@ -200,7 +241,7 @@ def main() -> None:
         print(e)
         return
     dispatcher = bot_updater.dispatcher
-    dispatcher.add_handler(CommandHandler("commands", commands))
+    dispatcher.add_handler(CommandHandler(['command', 'commands'], commands))
 
     dispatcher.add_handler(ConversationHandler(
         entry_points=[CallbackQueryHandler(check_game, pattern='^' + str(FIRST) + '$'),
@@ -220,7 +261,8 @@ def main() -> None:
             SEVEN: [MessageHandler(Filters.text, callback=update_game)]
 
         },
-        fallbacks=[CommandHandler('quit', quit_conversation)]
+        conversation_timeout=300,
+        fallbacks=[CommandHandler('quit', quit_conversation)],
     ))
     global games_list
     try:
@@ -228,27 +270,29 @@ def main() -> None:
             games_list = pickle.load(open('data.pickle', 'rb'))
             for i in games_list:
                 print(i.get_Name(), type(i))
+        else:
+            # debug
+            games_list.append(Game('test', 4))
+            games_list[0].update_user('capuz', 1)
+            games_list[0].update_user('rick', 2)
+            games_list[0].update_user('boss', 3)
+            games_list[0].update_user('capuz', 1)
+            games_list[0].update_user('rick', 3)
+            games_list[0].update_user('boss', 2)
+            games_list[0].update_user('capuz', 1)
+            games_list[0].update_user('rick', 2)
+            games_list[0].update_user('boss', 3)
+            games_list[0].update_user('capuz', 1)
+            games_list[0].update_user('rick', 2)
+            games_list[0].update_user('boss', 3)
+            games_list.append(Game('the mind', 4))
+            games_list.append(Game('surviving mars', 9))
     except Exception as e:
         print(e)
         return
-    '''games_list.append(Game('test', 4))
-    games_list[0].update_user('capuz', 1)
-    games_list[0].update_user('rick', 2)
-    games_list[0].update_user('boss', 3)
-    games_list[0].update_user('capuz', 1)
-    games_list[0].update_user('rick', 3)
-    games_list[0].update_user('boss', 2)
-    games_list[0].update_user('capuz', 1)
-    games_list[0].update_user('rick', 2)
-    games_list[0].update_user('boss', 3)
-    games_list[0].update_user('capuz', 1)
-    games_list[0].update_user('rick', 2)
-    games_list[0].update_user('boss', 3)
-    games_list.append(Game('azz', 5))
-    games_list.append(Game('the mind', 4))
-    games_list.append(Game('surviving mars', 9))'''
-    bot_updater.start_polling()
 
+    bot_updater.start_polling()
+    # bot_updater.bot.sendMessage(chat_id='128856686', text='Hello there!')
     # Run the bot until you press Ctrl-C or the process receives SIGINT,
     # SIGTERM or SIGABRT. This should be used most of the time, since
     # start_polling() is non-blocking and will stop the bot gracefully.
