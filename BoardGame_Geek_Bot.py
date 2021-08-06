@@ -8,7 +8,6 @@ from name_comparator import *
 from Error_Handler import *
 
 from telegram import Update, Chat, ChatMember, ParseMode, ChatMemberUpdated, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram import *
 from telegram.ext import (
     Updater,
     CommandHandler,
@@ -22,6 +21,8 @@ from telegram.ext import (
 
 bot_updater = None
 
+is_busy = False
+
 
 class Custom_Handler(logging.Handler):
     def __init__(self):
@@ -29,20 +30,22 @@ class Custom_Handler(logging.Handler):
         self.chat_id = '128856686'
 
     def emit(self, log_record: logging.LogRecord):
+        global is_busy
         log_message = self.format(log_record)
         # print(log_message)
         # Do stuff here...
         if bot_updater is not None and log_record.levelname != 'INFO':
-            print('\n\n\n\n\n\n\n\n\n\n\n\n', log_message)
+            #print('\n\n\n\n\n\n\n\n\n\n\n\n', log_message)
             if len(log_message) >= 4096:
                 idx = 0
                 while idx < len(log_message):
                     bot_updater.bot.sendMessage(chat_id=self.chat_id, text=log_message[idx:(
-                        idx + 4096 if idx + 4096 <= len(log_message) else log_message)])
+                        idx + 4096 if idx + 4096 <= len(log_message) else len(log_message))])
                     idx += 4096
             else:
                 bot_updater.bot.sendMessage(chat_id=self.chat_id, text=log_message)
-
+        elif log_record.levelname == 'INFO' and 'Removed job ' in log_message:
+            is_busy=False
 
 # Enable logging
 logging.basicConfig(
@@ -95,9 +98,10 @@ def check_size(update: Update, context: CallbackContext):
 
 
 def insert_game(update: Update, context: CallbackContext):
-    global tmp_game
+    global tmp_game, is_busy
     tmp_game[1] = update.message.text
     if tmp_game[0] not in [i.get_Name() for i in games_list]:
+        x = Game(tmp_game[0], tmp_game[1])
         games_list.append(Game(tmp_game[0], tmp_game[1]))
         update.message.reply_text('Gioco Aggiunto!')
         save()
@@ -105,11 +109,16 @@ def insert_game(update: Update, context: CallbackContext):
         update.message.reply_text('Gioco Già presente!')
 
     tmp_game = [' ', ' ']
+    is_busy=False
     return ConversationHandler.END
 
 
 def commands(update: Update, context: CallbackContext):
-    # print(update.message.chat_id)
+    global is_busy
+    if is_busy:
+        update.message.reply_text('\n Bot impegnato con un altro comando')
+        update.message.delete()
+        return
     keyboard = [
         [InlineKeyboardButton("Add Game", callback_data=str(FIRST))],
         [InlineKeyboardButton("Get Stats", callback_data=str(SECOND))],
@@ -119,6 +128,7 @@ def commands(update: Update, context: CallbackContext):
     reply_markup = InlineKeyboardMarkup(keyboard)
     update.message.reply_photo(open('logo/logo.jpg', 'rb'), caption='Commands:',
                                reply_markup=reply_markup)
+    is_busy = True
 
 
 def check_stats(update: Update, context: CallbackContext):
@@ -134,6 +144,7 @@ def check_stats(update: Update, context: CallbackContext):
 
 
 def get_game_stats(update: Update, context: CallbackContext):
+    global is_busy
     msg = ''
     # if update.message.text.lower() in [i.get_Name().lower() for i in games_list]:
     for i in games_list:
@@ -144,13 +155,16 @@ def get_game_stats(update: Update, context: CallbackContext):
                 update.message.reply_text(msg)
             else:
                 update.message.reply_text('Non ci sono dati per ora')
+            is_busy = False
             return ConversationHandler.END
     update.message.reply_text('Non ci sono giochi in lista chiamati {}'.format(update.message.text))
     # update.message.delete()
+    is_busy = False
     return ConversationHandler.END
 
 
 def get_player_stats(update: Update, context: CallbackContext):
+    global is_busy
     msg = 'le statistiche di ' + update.message.text + ' sono:\n\n'
     stats = ''
     for x in games_list:
@@ -162,6 +176,7 @@ def get_player_stats(update: Update, context: CallbackContext):
     else:
         update.message.reply_text(msg + stats, parse_mode=ParseMode.MARKDOWN)
     update.message.delete()
+    is_busy = False
     return ConversationHandler.END
 
 
@@ -182,7 +197,7 @@ def select_player(update: Update, context: CallbackContext):
 
 
 def select_update_game(update: Update, context: CallbackContext):
-    global tmp_game
+    global tmp_game, is_busy
     if update.message.text.lower() in [i.get_Name().lower() for i in games_list]:
         for j in games_list:
             if j.get_Name().lower() == update.message.text.lower():
@@ -193,6 +208,7 @@ def select_update_game(update: Update, context: CallbackContext):
     else:
         update.message.reply_text('nessun gioco trovato col nome {}'.format(update.message.text))
         update.message.delete()
+        is_busy = False
         return ConversationHandler.END
 
 
@@ -205,19 +221,22 @@ def upd_name(update: Update, context: CallbackContext):
 
 
 def quit_conversation(update: Update, context: CallbackContext):
+    global is_busy
+    is_busy = False
     return ConversationHandler.END
 
 
 def update_game(update: Update, context: CallbackContext):
-    global tmp_game
+    global tmp_game, is_busy
     msg = update.message.text.split()
     if len(msg) < 2 or not any(char.isdigit() for char in msg):
         tmp_game = [' ', ' ']
+        is_busy = False
         return ConversationHandler.END
     else:
         tmp_game[0].update_user(msg[0], int(msg[1]))
         update.message.reply_text('inserire il successivo nome giocatore e posizione separati da spazio (e.g. Mario 1)')
-        update.message.delete(timeout=2000)
+        # update.message.delete(timeout=2000)
         save()
         return SEVEN
 
@@ -241,8 +260,8 @@ def main() -> None:
         print(e)
         return
     dispatcher = bot_updater.dispatcher
-    dispatcher.add_handler(CommandHandler(['command', 'commands'], commands))
 
+    dispatcher.add_handler(CommandHandler(['command', 'commands'], commands))
     dispatcher.add_handler(ConversationHandler(
         entry_points=[CallbackQueryHandler(check_game, pattern='^' + str(FIRST) + '$'),
                       CallbackQueryHandler(check_stats, pattern='^' + str(SECOND) + '$'),
@@ -261,7 +280,7 @@ def main() -> None:
             SEVEN: [MessageHandler(Filters.text, callback=update_game)]
 
         },
-        conversation_timeout=300,
+        conversation_timeout=10,
         fallbacks=[CommandHandler('quit', quit_conversation)],
     ))
     global games_list
